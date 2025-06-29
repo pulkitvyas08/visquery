@@ -1,14 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ImageItem, Album } from '@/types';
+import * as MediaLibrary from 'expo-media-library';
 
-const STORAGE_KEY = 'ai-gallery-images';
-const ALBUMS_KEY = 'ai-gallery-albums';
+const AI_PROCESSED_KEY = 'ai-gallery-processed';
+const USER_ALBUMS_KEY = 'ai-gallery-user-albums';
+const FAVORITES_KEY = 'ai-gallery-favorites';
 
 export function useImageGallery() {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
+  const [aiProcessedImages, setAiProcessedImages] = useState<
+    Map<string, Partial<ImageItem>>
+  >(new Map());
 
   useEffect(() => {
     loadData();
@@ -17,29 +22,23 @@ export function useImageGallery() {
   const loadData = async () => {
     try {
       setLoading(true);
-      
-      // Load images
-      const storedImages = await AsyncStorage.getItem(STORAGE_KEY);
-      if (storedImages) {
-        const parsedImages = JSON.parse(storedImages);
-        setImages(parsedImages);
-      } else {
-        // Initialize with sample data for demo
-        const sampleImages = generateSampleImages();
-        setImages(sampleImages);
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(sampleImages));
+
+      // Load only AI-processed image metadata (small dataset)
+      const storedProcessed = await AsyncStorage.getItem(AI_PROCESSED_KEY);
+      if (storedProcessed) {
+        const processedArray: [string, Partial<ImageItem>][] =
+          JSON.parse(storedProcessed);
+        const processedMap = new Map<string, Partial<ImageItem>>(
+          processedArray
+        );
+        setAiProcessedImages(processedMap);
       }
 
-      // Load albums
-      const storedAlbums = await AsyncStorage.getItem(ALBUMS_KEY);
-      if (storedAlbums) {
-        const parsedAlbums = JSON.parse(storedAlbums);
-        setAlbums(parsedAlbums);
-      } else {
-        // Initialize with sample albums
-        const sampleAlbums = generateSampleAlbums();
-        setAlbums(sampleAlbums);
-        await AsyncStorage.setItem(ALBUMS_KEY, JSON.stringify(sampleAlbums));
+      // Load user-created albums (small dataset)
+      const storedUserAlbums = await AsyncStorage.getItem(USER_ALBUMS_KEY);
+      if (storedUserAlbums) {
+        const userAlbums: Album[] = JSON.parse(storedUserAlbums);
+        setAlbums(userAlbums);
       }
     } catch (error) {
       console.error('Error loading gallery data:', error);
@@ -48,200 +47,233 @@ export function useImageGallery() {
     }
   };
 
-  const generateSampleImages = (): ImageItem[] => {
-    const sampleImages = [
-      {
-        id: '1',
-        uri: 'https://images.pexels.com/photos/417074/pexels-photo-417074.jpeg?auto=compress&cs=tinysrgb&w=800',
-        fileName: 'sunset_beach.jpg',
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-        modifiedAt: new Date(Date.now() - 86400000).toISOString(),
-        size: 2048000,
-        width: 1920,
-        height: 1080,
-        caption: 'Beautiful sunset over the ocean with golden reflections on the water',
-        tags: ['sunset', 'beach', 'ocean', 'golden hour', 'nature'],
-        albumId: 'album1',
-        metadata: {
-          textContent: '',
-          people: [],
-          objects: ['ocean', 'sky', 'clouds', 'horizon'],
-          colors: ['orange', 'blue', 'yellow', 'purple'],
-          mood: 'peaceful',
-          scene: 'outdoor',
-        },
-      },
-      {
-        id: '2',
-        uri: 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=800',
-        fileName: 'mountain_landscape.jpg',
-        createdAt: new Date(Date.now() - 172800000).toISOString(),
-        modifiedAt: new Date(Date.now() - 172800000).toISOString(),
-        size: 3072000,
-        width: 1920,
-        height: 1280,
-        caption: 'Majestic mountain range with snow-capped peaks under a clear blue sky',
-        tags: ['mountains', 'landscape', 'snow', 'nature', 'hiking'],
-        albumId: 'album2',
-        metadata: {
-          textContent: '',
-          people: [],
-          objects: ['mountain', 'snow', 'sky', 'rocks'],
-          colors: ['blue', 'white', 'gray', 'green'],
-          mood: 'majestic',
-          scene: 'outdoor',
-        },
-      },
-      {
-        id: '3',
-        uri: 'https://images.pexels.com/photos/1805164/pexels-photo-1805164.jpeg?auto=compress&cs=tinysrgb&w=800',
-        fileName: 'city_night.jpg',
-        createdAt: new Date(Date.now() - 259200000).toISOString(),
-        modifiedAt: new Date(Date.now() - 259200000).toISOString(),
-        size: 2560000,
-        width: 1920,
-        height: 1080,
-        caption: 'Vibrant city skyline at night with illuminated skyscrapers',
-        tags: ['city', 'night', 'lights', 'urban', 'skyline'],
-        albumId: 'album3',
-        metadata: {
-          textContent: '',
-          people: [],
-          objects: ['buildings', 'lights', 'cars', 'roads'],
-          colors: ['blue', 'yellow', 'orange', 'purple'],
-          mood: 'energetic',
-          scene: 'urban',
-        },
-      },
-      {
-        id: '4',
-        uri: 'https://images.pexels.com/photos/1133957/pexels-photo-1133957.jpeg?auto=compress&cs=tinysrgb&w=800',
-        fileName: 'forest_path.jpg',
-        createdAt: new Date(Date.now() - 345600000).toISOString(),
-        modifiedAt: new Date(Date.now() - 345600000).toISOString(),
-        size: 1843200,
-        width: 1920,
-        height: 1280,
-        caption: 'Peaceful forest path surrounded by tall trees and dappled sunlight',
-        tags: ['forest', 'path', 'trees', 'nature', 'peaceful'],
-        albumId: 'album2',
-        metadata: {
-          textContent: '',
-          people: [],
-          objects: ['trees', 'path', 'leaves', 'sunlight'],
-          colors: ['green', 'brown', 'yellow'],
-          mood: 'peaceful',
-          scene: 'outdoor',
-        },
-      },
-      {
-        id: '5',
-        uri: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=800',
-        fileName: 'coffee_morning.jpg',
-        createdAt: new Date(Date.now() - 432000000).toISOString(),
-        modifiedAt: new Date(Date.now() - 432000000).toISOString(),
-        size: 1536000,
-        width: 1920,
-        height: 1080,
-        caption: 'Cozy morning coffee setup with steam rising from a white cup',
-        tags: ['coffee', 'morning', 'cozy', 'drink', 'lifestyle'],
-        albumId: 'album4',
-        metadata: {
-          textContent: '',
-          people: [],
-          objects: ['coffee', 'cup', 'steam', 'table'],
-          colors: ['brown', 'white', 'beige'],
-          mood: 'cozy',
-          scene: 'indoor',
-        },
-      },
-      {
-        id: '6',
-        uri: 'https://images.pexels.com/photos/1366919/pexels-photo-1366919.jpeg?auto=compress&cs=tinysrgb&w=800',
-        fileName: 'flower_garden.jpg',
-        createdAt: new Date(Date.now() - 518400000).toISOString(),
-        modifiedAt: new Date(Date.now() - 518400000).toISOString(),
-        size: 2048000,
-        width: 1920,
-        height: 1280,
-        caption: 'Colorful flower garden in full bloom with various species',
-        tags: ['flowers', 'garden', 'colorful', 'nature', 'spring'],
-        albumId: 'album2',
-        metadata: {
-          textContent: '',
-          people: [],
-          objects: ['flowers', 'petals', 'stems', 'leaves'],
-          colors: ['red', 'yellow', 'pink', 'green'],
-          mood: 'cheerful',
-          scene: 'outdoor',
-        },
-      },
-    ];
+  const mergeMediaAssets = useCallback(
+    async (
+      mediaAssets: MediaLibrary.Asset[],
+      mediaAlbums: MediaLibrary.Album[] = []
+    ) => {
+      try {
+        console.log(
+          `Merging ${mediaAssets.length} media assets and ${mediaAlbums.length} albums`
+        );
 
-    return sampleImages;
-  };
+        // Convert device images to our format WITHOUT storing them in AsyncStorage
+        // Only enrich with AI data if available
+        const convertedImages: ImageItem[] = mediaAssets.map((asset) => {
+          const aiData = aiProcessedImages.get(asset.id);
 
-  const generateSampleAlbums = (): Album[] => {
-    return [
-      {
-        id: 'album1',
-        title: 'Beach Vacation',
-        count: 1,
-        coverImage: 'https://images.pexels.com/photos/417074/pexels-photo-417074.jpeg?auto=compress&cs=tinysrgb&w=800',
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-      },
-      {
-        id: 'album2',
-        title: 'Nature & Landscapes',
-        count: 3,
-        coverImage: 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=800',
-        createdAt: new Date(Date.now() - 172800000).toISOString(),
-      },
-      {
-        id: 'album3',
-        title: 'City Life',
-        count: 1,
-        coverImage: 'https://images.pexels.com/photos/1805164/pexels-photo-1805164.jpeg?auto=compress&cs=tinysrgb&w=800',
-        createdAt: new Date(Date.now() - 259200000).toISOString(),
-      },
-      {
-        id: 'album4',
-        title: 'Daily Moments',
-        count: 1,
-        coverImage: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=800',
-        createdAt: new Date(Date.now() - 432000000).toISOString(),
-      },
-    ];
-  };
+          return {
+            id: asset.id,
+            uri: asset.uri,
+            fileName: asset.filename || `IMG_${asset.id}.jpg`,
+            createdAt: new Date(asset.creationTime).toISOString(),
+            modifiedAt: new Date(
+              asset.modificationTime || asset.creationTime
+            ).toISOString(),
+            size: 0, // MediaLibrary doesn't provide file size
+            width: asset.width,
+            height: asset.height,
+            caption: aiData?.caption || '',
+            tags: aiData?.tags || [],
+            albumId: asset.albumId || undefined,
+            metadata: aiData?.metadata || {
+              textContent: '',
+              people: [],
+              objects: [],
+              colors: [],
+              mood: '',
+              scene: '',
+            },
+            embedding: aiData?.embedding,
+          };
+        });
 
-  const saveImages = async (newImages: ImageItem[]) => {
+        // Set images in memory only - NO AsyncStorage
+        setImages(convertedImages);
+
+        // Convert device albums to our format
+        const convertedAlbums: Album[] = await Promise.all(
+          mediaAlbums.map(async (album) => {
+            try {
+              // Get first asset for cover image
+              const albumAssets = await MediaLibrary.getAssetsAsync({
+                album: album,
+                first: 1,
+                mediaType: 'photo',
+              });
+
+              return {
+                id: album.id,
+                title: album.title,
+                count: album.assetCount || 0,
+                coverImage: albumAssets.assets[0]?.uri || undefined,
+                createdAt: new Date().toISOString(),
+              };
+            } catch (error) {
+              console.error(`Error processing album ${album.title}:`, error);
+              return {
+                id: album.id,
+                title: album.title,
+                count: album.assetCount || 0,
+                coverImage: undefined,
+                createdAt: new Date().toISOString(),
+              };
+            }
+          })
+        );
+
+        // Merge with user-created albums
+        const existingUserAlbums = albums.filter(
+          (album) => !album.id.startsWith('device-')
+        );
+        const allAlbums = [...convertedAlbums, ...existingUserAlbums];
+        setAlbums(allAlbums);
+
+        console.log(
+          `Successfully merged ${convertedImages.length} images and ${allAlbums.length} albums`
+        );
+      } catch (error) {
+        console.error('Error merging media assets:', error);
+      }
+    },
+    [aiProcessedImages, albums]
+  );
+
+  const saveAiProcessedData = async (
+    newProcessedMap: Map<string, Partial<ImageItem>>
+  ) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newImages));
-      setImages(newImages);
+      // Only save AI-processed metadata, not the full images
+      const dataToSave: [string, Partial<ImageItem>][] = Array.from(
+        newProcessedMap.entries()
+      );
+      await AsyncStorage.setItem(AI_PROCESSED_KEY, JSON.stringify(dataToSave));
+      setAiProcessedImages(newProcessedMap);
     } catch (error) {
-      console.error('Error saving images:', error);
+      const err = error as any;
+      console.error('Error saving AI processed data:', error);
+
+      // If storage is full, try to save only the most recent AI processed data
+      if (
+        err.message?.includes('full') ||
+        err.message?.includes('SQLITE_FULL')
+      ) {
+        try {
+          console.log('Storage full - reducing AI processed data...');
+          const recentEntries: [string, Partial<ImageItem>][] = Array.from(
+            newProcessedMap.entries()
+          ).slice(0, 1000);
+          const reducedMap = new Map<string, Partial<ImageItem>>(recentEntries);
+          await AsyncStorage.setItem(
+            AI_PROCESSED_KEY,
+            JSON.stringify(recentEntries)
+          );
+          setAiProcessedImages(reducedMap);
+          console.log(
+            `Reduced AI processed data to ${recentEntries.length} entries`
+          );
+        } catch (fallbackError) {
+          console.error('Failed to save even reduced AI data:', fallbackError);
+        }
+      }
     }
   };
 
   const addImage = async (image: ImageItem) => {
+    // For new images (like camera captures), add AI processed data to storage
+    const newProcessedMap = new Map(aiProcessedImages);
+    newProcessedMap.set(image.id, {
+      caption: image.caption,
+      tags: image.tags,
+      metadata: image.metadata,
+      embedding: image.embedding,
+    });
+
+    await saveAiProcessedData(newProcessedMap);
+
+    // Update the images list in memory
     const updatedImages = [image, ...images];
-    await saveImages(updatedImages);
+    setImages(updatedImages);
   };
 
   const removeImage = async (imageId: string) => {
-    const updatedImages = images.filter(img => img.id !== imageId);
-    await saveImages(updatedImages);
+    // Remove from AI processed data
+    const newProcessedMap = new Map(aiProcessedImages);
+    newProcessedMap.delete(imageId);
+    await saveAiProcessedData(newProcessedMap);
+
+    // Update images list in memory
+    const updatedImages = images.filter((img) => img.id !== imageId);
+    setImages(updatedImages);
   };
 
   const updateImage = async (imageId: string, updates: Partial<ImageItem>) => {
-    const updatedImages = images.map(img => 
+    // Update AI processed data only
+    const newProcessedMap = new Map(aiProcessedImages);
+    const existing = newProcessedMap.get(imageId) || {};
+    newProcessedMap.set(imageId, {
+      ...existing,
+      caption: updates.caption,
+      tags: updates.tags,
+      metadata: updates.metadata,
+      embedding: updates.embedding,
+    });
+
+    await saveAiProcessedData(newProcessedMap);
+
+    // Update images list in memory
+    const updatedImages = images.map((img) =>
       img.id === imageId ? { ...img, ...updates } : img
     );
-    await saveImages(updatedImages);
+    setImages(updatedImages);
   };
 
   const refreshImages = async () => {
     await loadData();
+  };
+
+  // Get storage usage info (only for AI data, not device images)
+  const getStorageInfo = async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const galleryKeys = keys.filter((key) => key.startsWith('ai-gallery-'));
+
+      let totalSize = 0;
+      for (const key of galleryKeys) {
+        const data = await AsyncStorage.getItem(key);
+        if (data) {
+          totalSize += new Blob([data]).size;
+        }
+      }
+
+      return {
+        aiProcessedCount: aiProcessedImages.size,
+        totalDeviceImages: images.length,
+        storageUsedMB: Math.round((totalSize / (1024 * 1024)) * 100) / 100,
+        storageKeys: galleryKeys,
+      };
+    } catch (error) {
+      console.error('Error getting storage info:', error);
+      return {
+        aiProcessedCount: 0,
+        totalDeviceImages: 0,
+        storageUsedMB: 0,
+        storageKeys: [],
+      };
+    }
+  };
+
+  // Clear storage if needed
+  const clearStorage = async () => {
+    try {
+      await AsyncStorage.removeItem(AI_PROCESSED_KEY);
+      await AsyncStorage.removeItem(USER_ALBUMS_KEY);
+      await AsyncStorage.removeItem(FAVORITES_KEY);
+      setAiProcessedImages(new Map());
+      console.log('Storage cleared successfully');
+    } catch (error) {
+      console.error('Error clearing storage:', error);
+    }
   };
 
   return {
@@ -252,5 +284,9 @@ export function useImageGallery() {
     removeImage,
     updateImage,
     refreshImages,
+    mergeMediaAssets,
+    getStorageInfo,
+    clearStorage,
+    aiProcessedImages,
   };
 }

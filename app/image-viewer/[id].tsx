@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,34 +9,59 @@ import {
   Share,
   Alert,
   ScrollView,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Share as ShareIcon, Download, Heart, MoveVertical as MoreVertical, Info, CreditCard as Edit3, Trash2, Tag } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Share as ShareIcon,
+  Download,
+  Heart,
+  MoveVertical as MoreVertical,
+  Info,
+  CreditCard as Edit3,
+  Trash2,
+  Tag,
+} from 'lucide-react-native';
 import { useImageGallery } from '@/hooks/useImageGallery';
-import Animated, { 
-  FadeInDown, 
+import Animated, {
+  FadeInDown,
   FadeInUp,
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  runOnJS
+  runOnJS,
 } from 'react-native-reanimated';
 import { Image } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
 export default function ImageViewerScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, imageIndex, imageIds } = useLocalSearchParams<{
+    id: string;
+    imageIndex?: string;
+    imageIds?: string;
+  }>();
+
   const { images, removeImage } = useImageGallery();
   const [showControls, setShowControls] = useState(true);
   const [showInfo, setShowInfo] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
-  
-  // Move all hooks to the top level, before any conditional returns
+  const [currentIndex, setCurrentIndex] = useState(parseInt(imageIndex || '0'));
+
   const controlsOpacity = useSharedValue(1);
   const infoTranslateY = useSharedValue(height);
-  
+  const translateX = useSharedValue(0);
+
+  // Parse image IDs for navigation
+  const navigationImageIds = imageIds ? JSON.parse(imageIds) : [id];
+  const navigationImages = navigationImageIds
+    .map((imgId: string) => images.find((img) => img.id === imgId))
+    .filter(Boolean);
+
+  const currentImage = navigationImages[currentIndex];
+
   const controlsStyle = useAnimatedStyle(() => ({
     opacity: controlsOpacity.value,
   }));
@@ -44,10 +69,12 @@ export default function ImageViewerScreen() {
   const infoStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: infoTranslateY.value }],
   }));
-  
-  const image = images.find(img => img.id === id);
 
-  if (!image) {
+  const imageStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  if (!currentImage) {
     return (
       <View style={styles.container}>
         <SafeAreaView style={styles.safeArea}>
@@ -57,23 +84,75 @@ export default function ImageViewerScreen() {
     );
   }
 
+  const navigateToImage = (direction: 'prev' | 'next') => {
+    const newIndex =
+      direction === 'prev'
+        ? Math.max(0, currentIndex - 1)
+        : Math.min(navigationImages.length - 1, currentIndex + 1);
+
+    if (newIndex !== currentIndex) {
+      setCurrentIndex(newIndex);
+    }
+  };
+
+  const panResponder = PanResponder.create({
+    onMoveShouldSetPanResponder: (evt, gestureState) => {
+      return (
+        Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
+        Math.abs(gestureState.dx) > 10
+      );
+    },
+    onPanResponderMove: (evt, gestureState) => {
+      translateX.value = gestureState.dx;
+    },
+    onPanResponderRelease: (evt, gestureState) => {
+      const threshold = width * 0.3;
+
+      if (gestureState.dx > threshold && currentIndex > 0) {
+        // Swipe right - go to previous image
+        translateX.value = withTiming(width, { duration: 300 }, () => {
+          runOnJS(navigateToImage)('prev');
+          translateX.value = 0;
+        });
+      } else if (
+        gestureState.dx < -threshold &&
+        currentIndex < navigationImages.length - 1
+      ) {
+        // Swipe left - go to next image
+        translateX.value = withTiming(-width, { duration: 300 }, () => {
+          runOnJS(navigateToImage)('next');
+          translateX.value = 0;
+        });
+      } else {
+        // Snap back
+        translateX.value = withTiming(0, { duration: 200 });
+      }
+    },
+  });
+
   const toggleControls = () => {
     const newShowControls = !showControls;
     setShowControls(newShowControls);
-    controlsOpacity.value = withTiming(newShowControls ? 1 : 0, { duration: 300 });
+    controlsOpacity.value = withTiming(newShowControls ? 1 : 0, {
+      duration: 300,
+    });
   };
 
   const toggleInfo = () => {
     const newShowInfo = !showInfo;
     setShowInfo(newShowInfo);
-    infoTranslateY.value = withTiming(newShowInfo ? 0 : height, { duration: 300 });
+    infoTranslateY.value = withTiming(newShowInfo ? 0 : height, {
+      duration: 300,
+    });
   };
 
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `Check out this photo: ${image.caption || image.fileName}`,
-        url: image.uri,
+        message: `Check out this photo: ${
+          currentImage.caption || currentImage.fileName
+        }`,
+        url: currentImage.uri,
       });
     } catch (error) {
       console.error('Error sharing:', error);
@@ -86,13 +165,13 @@ export default function ImageViewerScreen() {
       'Are you sure you want to delete this photo? This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await removeImage(image.id);
+            await removeImage(currentImage.id);
             router.back();
-          }
+          },
         },
       ]
     );
@@ -101,39 +180,50 @@ export default function ImageViewerScreen() {
   return (
     <View style={styles.container}>
       <StatusBar hidden />
-      
+
       {/* Main Image */}
-      <TouchableOpacity 
-        style={styles.imageContainer} 
-        activeOpacity={1}
-        onPress={toggleControls}
+      <Animated.View
+        style={[styles.imageContainer, imageStyle]}
+        {...panResponder.panHandlers}
       >
-        <Image 
-          source={{ uri: image.uri }} 
-          style={styles.image}
-          resizeMode="contain"
-        />
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.imageTouch}
+          activeOpacity={1}
+          onPress={toggleControls}
+        >
+          <Image
+            source={{ uri: currentImage.uri }}
+            style={styles.image}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+      </Animated.View>
 
       {/* Top Controls */}
       <Animated.View style={[styles.topControls, controlsStyle]}>
         <SafeAreaView style={styles.topSafeArea}>
           <View style={styles.topBar}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.controlButton}
               onPress={() => router.back()}
             >
               <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
             </TouchableOpacity>
-            
+
+            {navigationImages.length > 1 && (
+              <Text style={styles.imageCounter}>
+                {currentIndex + 1} of {navigationImages.length}
+              </Text>
+            )}
+
             <View style={styles.topActions}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.controlButton}
                 onPress={handleShare}
               >
                 <ShareIcon size={24} color="#FFFFFF" strokeWidth={2} />
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.controlButton}
                 onPress={toggleInfo}
               >
@@ -151,27 +241,27 @@ export default function ImageViewerScreen() {
       <Animated.View style={[styles.bottomControls, controlsStyle]}>
         <SafeAreaView style={styles.bottomSafeArea}>
           <View style={styles.bottomBar}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.actionButton, isLiked && styles.likedButton]}
               onPress={() => setIsLiked(!isLiked)}
             >
-              <Heart 
-                size={24} 
-                color={isLiked ? "#FF4444" : "#FFFFFF"} 
+              <Heart
+                size={24}
+                color={isLiked ? '#FF4444' : '#FFFFFF'}
                 strokeWidth={2}
-                fill={isLiked ? "#FF4444" : "none"}
+                fill={isLiked ? '#FF4444' : 'none'}
               />
             </TouchableOpacity>
-            
+
             <TouchableOpacity style={styles.actionButton}>
               <Download size={24} color="#FFFFFF" strokeWidth={2} />
             </TouchableOpacity>
-            
+
             <TouchableOpacity style={styles.actionButton}>
               <Edit3 size={24} color="#FFFFFF" strokeWidth={2} />
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.actionButton}
               onPress={handleDelete}
             >
@@ -184,7 +274,10 @@ export default function ImageViewerScreen() {
       {/* Info Panel */}
       <Animated.View style={[styles.infoPanel, infoStyle]}>
         <View style={styles.infoPanelHandle} />
-        <ScrollView style={styles.infoContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.infoContent}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.infoHeader}>
             <Text style={styles.infoTitle}>Photo Details</Text>
             <TouchableOpacity onPress={toggleInfo}>
@@ -197,46 +290,48 @@ export default function ImageViewerScreen() {
             <Text style={styles.infoSectionTitle}>Basic Information</Text>
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>File Name</Text>
-              <Text style={styles.infoValue}>{image.fileName}</Text>
+              <Text style={styles.infoValue}>{currentImage.fileName}</Text>
             </View>
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Date Created</Text>
               <Text style={styles.infoValue}>
-                {new Date(image.createdAt).toLocaleDateString('en-US', {
+                {new Date(currentImage.createdAt).toLocaleDateString('en-US', {
                   year: 'numeric',
                   month: 'long',
                   day: 'numeric',
                   hour: '2-digit',
-                  minute: '2-digit'
+                  minute: '2-digit',
                 })}
               </Text>
             </View>
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Size</Text>
               <Text style={styles.infoValue}>
-                {Math.round(image.size / (1024 * 1024) * 100) / 100} MB
+                {Math.round((currentImage.size / (1024 * 1024)) * 100) / 100} MB
               </Text>
             </View>
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Dimensions</Text>
-              <Text style={styles.infoValue}>{image.width} × {image.height}</Text>
+              <Text style={styles.infoValue}>
+                {currentImage.width} × {currentImage.height}
+              </Text>
             </View>
           </View>
 
           {/* Caption */}
-          {image.caption && (
+          {currentImage.caption && (
             <View style={styles.infoSection}>
               <Text style={styles.infoSectionTitle}>AI Caption</Text>
-              <Text style={styles.captionText}>{image.caption}</Text>
+              <Text style={styles.captionText}>{currentImage.caption}</Text>
             </View>
           )}
 
           {/* Tags */}
-          {image.tags.length > 0 && (
+          {currentImage.tags.length > 0 && (
             <View style={styles.infoSection}>
               <Text style={styles.infoSectionTitle}>Tags</Text>
               <View style={styles.tagsContainer}>
-                {image.tags.map((tag, index) => (
+                {currentImage.tags.map((tag: string, index: number) => (
                   <View key={index} style={styles.tag}>
                     <Tag size={12} color="#1976D2" strokeWidth={2} />
                     <Text style={styles.tagText}>{tag}</Text>
@@ -247,39 +342,47 @@ export default function ImageViewerScreen() {
           )}
 
           {/* Metadata */}
-          {image.metadata && (
+          {currentImage.metadata && (
             <View style={styles.infoSection}>
               <Text style={styles.infoSectionTitle}>AI Analysis</Text>
-              {image.metadata.objects && image.metadata.objects.length > 0 && (
+              {currentImage.metadata.objects &&
+                currentImage.metadata.objects.length > 0 && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Objects Detected</Text>
+                    <Text style={styles.infoValue}>
+                      {currentImage.metadata.objects.join(', ')}
+                    </Text>
+                  </View>
+                )}
+              {currentImage.metadata.colors &&
+                currentImage.metadata.colors.length > 0 && (
+                  <View style={styles.infoItem}>
+                    <Text style={styles.infoLabel}>Dominant Colors</Text>
+                    <View style={styles.colorsContainer}>
+                      {currentImage.metadata.colors.map(
+                        (color: string, index: number) => (
+                          <View key={index} style={styles.colorChip}>
+                            <Text style={styles.colorText}>{color}</Text>
+                          </View>
+                        )
+                      )}
+                    </View>
+                  </View>
+                )}
+              {currentImage.metadata.mood && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Objects Detected</Text>
+                  <Text style={styles.infoLabel}>Mood</Text>
                   <Text style={styles.infoValue}>
-                    {image.metadata.objects.join(', ')}
+                    {currentImage.metadata.mood}
                   </Text>
                 </View>
               )}
-              {image.metadata.colors && image.metadata.colors.length > 0 && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Dominant Colors</Text>
-                  <View style={styles.colorsContainer}>
-                    {image.metadata.colors.map((color, index) => (
-                      <View key={index} style={styles.colorChip}>
-                        <Text style={styles.colorText}>{color}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
-              {image.metadata.mood && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoLabel}>Mood</Text>
-                  <Text style={styles.infoValue}>{image.metadata.mood}</Text>
-                </View>
-              )}
-              {image.metadata.scene && (
+              {currentImage.metadata.scene && (
                 <View style={styles.infoItem}>
                   <Text style={styles.infoLabel}>Scene</Text>
-                  <Text style={styles.infoValue}>{image.metadata.scene}</Text>
+                  <Text style={styles.infoValue}>
+                    {currentImage.metadata.scene}
+                  </Text>
                 </View>
               )}
             </View>
@@ -305,6 +408,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  imageTouch: {
+    width: width,
+    height: height,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   image: {
     width: width,
     height: height,
@@ -325,6 +434,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
+  },
+  imageCounter: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
   },
   topActions: {
     flexDirection: 'row',

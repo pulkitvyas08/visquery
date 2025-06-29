@@ -12,34 +12,35 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { 
-  Search, 
-  User, 
-  Camera, 
-  Settings, 
-  Clock, 
+import {
+  Search,
+  User,
+  Camera,
+  Settings,
+  Clock,
   TrendingUp,
   ChevronRight,
   Plus,
-  X
+  X,
 } from 'lucide-react-native';
 import { useImageGallery } from '@/hooks/useImageGallery';
 import { useImageSearch } from '@/hooks/useImageSearch';
 import { useMediaLibrary } from '@/hooks/useMediaLibrary';
-import Animated, { 
-  FadeInDown, 
-  FadeInRight, 
-  useAnimatedStyle, 
+import Animated, {
+  FadeInDown,
+  FadeInRight,
+  useAnimatedStyle,
   useSharedValue,
   interpolate,
-  withTiming
+  withTiming,
 } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
 const GRID_PADDING = 20;
 const GRID_GAP = 12;
 const GRID_COLS = 3;
-const IMAGE_SIZE = (width - GRID_PADDING * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS;
+const IMAGE_SIZE =
+  (width - GRID_PADDING * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS;
 
 export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,14 +51,29 @@ export default function HomeScreen() {
   const searchButtonScale = useSharedValue(0);
   const scrollViewRef = useRef<ScrollView>(null);
   const searchInputRef = useRef<TextInput>(null);
-  
-  const { images, albums, loading } = useImageGallery();
+
+  const { images, albums, loading, mergeMediaAssets } = useImageGallery();
   const { searchImages, recentSearches, suggestedSearches } = useImageSearch();
-  const { requestPermissions, hasPermissions } = useMediaLibrary();
+  const {
+    requestPermissions,
+    hasPermissions,
+    mediaAssets,
+    albums: mediaAlbums,
+  } = useMediaLibrary();
 
   useEffect(() => {
     requestPermissions();
   }, []);
+
+  // Merge media assets when they become available
+  useEffect(() => {
+    if (hasPermissions && mediaAssets.length > 0) {
+      console.log(
+        `Merging ${mediaAssets.length} media assets and ${mediaAlbums.length} albums`
+      );
+      mergeMediaAssets(mediaAssets, mediaAlbums);
+    }
+  }, [hasPermissions, mediaAssets, mediaAlbums, mergeMediaAssets]);
 
   const recentImages = images.slice(0, 6);
   const featuredAlbums = albums.slice(0, 4);
@@ -67,7 +83,7 @@ export default function HomeScreen() {
       setSearchResults([]);
       return;
     }
-    
+
     setIsSearching(true);
     try {
       const results = await searchImages(query);
@@ -99,11 +115,13 @@ export default function HomeScreen() {
   const handleScroll = (event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
     scrollY.value = offsetY;
-    
+
     const shouldShow = offsetY > 250;
     if (shouldShow !== showSearchButton) {
       setShowSearchButton(shouldShow);
-      searchButtonScale.value = withTiming(shouldShow ? 1 : 0, { duration: 300 });
+      searchButtonScale.value = withTiming(shouldShow ? 1 : 0, {
+        duration: 300,
+      });
     }
   };
 
@@ -127,7 +145,7 @@ export default function HomeScreen() {
             <Text style={styles.clearText}>Clear</Text>
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.imageGrid}>
           {searchResults.slice(0, 6).map((result, index) => (
             <Animated.View
@@ -135,7 +153,7 @@ export default function HomeScreen() {
               entering={FadeInRight.delay(index * 100)}
               style={styles.imageItem}
             >
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.imageContainer}
                 onPress={() => handleImagePress(result.item)}
               >
@@ -160,19 +178,19 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Gallery</Text>
           <View style={styles.headerActions}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.headerButton}
               onPress={() => router.push('/camera')}
             >
               <Camera size={24} color="#1976D2" strokeWidth={2} />
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.headerButton}
               onPress={() => router.push('/settings')}
             >
               <Settings size={24} color="#1976D2" strokeWidth={2} />
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.profileButton}
               onPress={() => router.push('/profile')}
             >
@@ -189,7 +207,10 @@ export default function HomeScreen() {
           scrollEventThrottle={16}
         >
           {/* Search Section */}
-          <Animated.View entering={FadeInDown.delay(100)} style={styles.searchSection}>
+          <Animated.View
+            entering={FadeInDown.delay(100)}
+            style={styles.searchSection}
+          >
             <View style={styles.searchContainer}>
               <View style={styles.searchBar}>
                 <Search size={20} color="#757575" strokeWidth={2} />
@@ -223,7 +244,10 @@ export default function HomeScreen() {
                       <Clock size={16} color="#757575" strokeWidth={2} />
                       <Text style={styles.suggestionTitle}>Recent</Text>
                     </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                    >
                       <View style={styles.suggestionTags}>
                         {recentSearches.slice(0, 5).map((search, index) => (
                           <TouchableOpacity
@@ -234,7 +258,9 @@ export default function HomeScreen() {
                               handleSearch(search);
                             }}
                           >
-                            <Text style={styles.suggestionTagText}>{search}</Text>
+                            <Text style={styles.suggestionTagText}>
+                              {search}
+                            </Text>
                           </TouchableOpacity>
                         ))}
                       </View>
@@ -246,7 +272,9 @@ export default function HomeScreen() {
                 <View style={styles.searchSuggestions}>
                   <View style={styles.suggestionHeader}>
                     <TrendingUp size={16} color="#757575" strokeWidth={2} />
-                    <Text style={styles.suggestionTitle}>Try searching for</Text>
+                    <Text style={styles.suggestionTitle}>
+                      Try searching for
+                    </Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <View style={styles.suggestionTags}>
@@ -259,7 +287,12 @@ export default function HomeScreen() {
                             handleSearch(suggestion);
                           }}
                         >
-                          <Text style={[styles.suggestionTagText, styles.trendingTagText]}>
+                          <Text
+                            style={[
+                              styles.suggestionTagText,
+                              styles.trendingTagText,
+                            ]}
+                          >
                             {suggestion}
                           </Text>
                         </TouchableOpacity>
@@ -272,13 +305,18 @@ export default function HomeScreen() {
           </Animated.View>
 
           {/* Search Results */}
-          {searchQuery.length > 0 ? renderSearchResults() : (
+          {searchQuery.length > 0 ? (
+            renderSearchResults()
+          ) : (
             <>
               {/* Recent Photos */}
-              <Animated.View entering={FadeInDown.delay(200)} style={styles.section}>
+              <Animated.View
+                entering={FadeInDown.delay(200)}
+                style={styles.section}
+              >
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Recent Photos</Text>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.seeAllButton}
                     onPress={() => router.push('/all-images')}
                   >
@@ -286,7 +324,7 @@ export default function HomeScreen() {
                     <ChevronRight size={16} color="#1976D2" strokeWidth={2} />
                   </TouchableOpacity>
                 </View>
-                
+
                 {recentImages.length > 0 ? (
                   <View style={styles.imageGrid}>
                     {recentImages.map((image, index) => (
@@ -295,11 +333,14 @@ export default function HomeScreen() {
                         entering={FadeInRight.delay(index * 100)}
                         style={styles.imageItem}
                       >
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           style={styles.imageContainer}
                           onPress={() => handleImagePress(image)}
                         >
-                          <Image source={{ uri: image.uri }} style={styles.image} />
+                          <Image
+                            source={{ uri: image.uri }}
+                            style={styles.image}
+                          />
                         </TouchableOpacity>
                       </Animated.View>
                     ))}
@@ -309,12 +350,11 @@ export default function HomeScreen() {
                     <Camera size={48} color="#E0E0E0" strokeWidth={1.5} />
                     <Text style={styles.emptyTitle}>No photos yet</Text>
                     <Text style={styles.emptySubtitle}>
-                      {!hasPermissions 
-                        ? "Grant media access to see your photos"
-                        : "Take some photos to get started"
-                      }
+                      {!hasPermissions
+                        ? 'Grant media access to see your photos'
+                        : 'Take some photos to get started'}
                     </Text>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.emptyButton}
                       onPress={() => router.push('/camera')}
                     >
@@ -326,15 +366,21 @@ export default function HomeScreen() {
               </Animated.View>
 
               {/* Albums */}
-              <Animated.View entering={FadeInDown.delay(300)} style={styles.section}>
+              <Animated.View
+                entering={FadeInDown.delay(300)}
+                style={styles.section}
+              >
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Albums</Text>
-                  <TouchableOpacity style={styles.seeAllButton}>
+                  <TouchableOpacity
+                    style={styles.seeAllButton}
+                    onPress={() => router.push('/albums')}
+                  >
                     <Text style={styles.seeAllText}>See all</Text>
                     <ChevronRight size={16} color="#1976D2" strokeWidth={2} />
                   </TouchableOpacity>
                 </View>
-                
+
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={styles.albumsContainer}>
                     {featuredAlbums.map((album, index) => (
@@ -343,15 +389,22 @@ export default function HomeScreen() {
                         entering={FadeInRight.delay(index * 100)}
                         style={styles.albumCard}
                       >
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           onPress={() => router.push(`/album/${album.id}`)}
                         >
                           <View style={styles.albumCover}>
                             {album.coverImage ? (
-                              <Image source={{ uri: album.coverImage }} style={styles.albumImage} />
+                              <Image
+                                source={{ uri: album.coverImage }}
+                                style={styles.albumImage}
+                              />
                             ) : (
                               <View style={styles.albumPlaceholder}>
-                                <Camera size={32} color="#E0E0E0" strokeWidth={1.5} />
+                                <Camera
+                                  size={32}
+                                  color="#E0E0E0"
+                                  strokeWidth={1.5}
+                                />
                               </View>
                             )}
                           </View>

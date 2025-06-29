@@ -1,19 +1,34 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
+  Dimensions,
   Alert,
   Platform,
 } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, Camera, RotateCcw, Slash as Flash, FlashlightOff as FlashOff, Image as ImageIcon, Download } from 'lucide-react-native';
+import {
+  Camera,
+  RotateCcw,
+  Slash as Flash,
+  FlashlightOff as FlashOff,
+  Image,
+  X,
+  Download,
+} from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useImageProcessor } from '@/hooks/useImageProcessor';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  FadeInDown,
+  FadeInUp,
+  SlideInLeft,
+} from 'react-native-reanimated';
+
+const { width, height } = Dimensions.get('window');
 
 export default function CameraScreen() {
   const [facing, setFacing] = useState<CameraType>('back');
@@ -21,7 +36,7 @@ export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [isProcessing, setIsProcessing] = useState(false);
   const cameraRef = useRef<CameraView>(null);
-  
+
   const { processImage } = useImageProcessor();
 
   if (!permission) {
@@ -34,29 +49,36 @@ export default function CameraScreen() {
 
   if (!permission.granted) {
     return (
-      <View style={styles.container}>
+      <LinearGradient colors={['#0F172A', '#1E293B']} style={styles.container}>
         <SafeAreaView style={styles.permissionContainer}>
-          <Animated.View entering={FadeInDown.delay(100)} style={styles.permissionContent}>
-            <Camera size={64} color="#1976D2" strokeWidth={1.5} />
+          <Animated.View
+            entering={FadeInUp.delay(100)}
+            style={styles.permissionContent}
+          >
+            <Camera size={64} color="#3B82F6" strokeWidth={1.5} />
             <Text style={styles.permissionTitle}>Camera Access Required</Text>
             <Text style={styles.permissionDescription}>
-              We need access to your camera to take photos and add them to your AI-powered gallery.
+              We need access to your camera to take photos and add them to your
+              AI-powered gallery.
             </Text>
-            <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+            <TouchableOpacity
+              style={styles.permissionButton}
+              onPress={requestPermission}
+            >
               <Text style={styles.permissionButtonText}>Grant Permission</Text>
             </TouchableOpacity>
           </Animated.View>
         </SafeAreaView>
-      </View>
+      </LinearGradient>
     );
   }
 
   const toggleCameraFacing = () => {
-    setFacing(current => (current === 'back' ? 'front' : 'back'));
+    setFacing((current) => (current === 'back' ? 'front' : 'back'));
   };
 
   const toggleFlash = () => {
-    setFlashMode(current => (current === 'off' ? 'on' : 'off'));
+    setFlashMode((current) => (current === 'off' ? 'on' : 'off'));
   };
 
   const takePicture = async () => {
@@ -70,14 +92,16 @@ export default function CameraScreen() {
       });
 
       if (photo) {
+        // Process the image with AI
         await processImage(photo.uri);
-        
+
         if (Platform.OS !== 'web') {
-          const { impactAsync, ImpactFeedbackStyle } = await import('expo-haptics');
+          // Show haptic feedback on native platforms
+          const { impactAsync, ImpactFeedbackStyle } = await import(
+            'expo-haptics'
+          );
           impactAsync(ImpactFeedbackStyle.Medium);
         }
-        
-        Alert.alert('Success', 'Photo added to your gallery!');
       }
     } catch (error) {
       console.error('Error taking picture:', error);
@@ -98,14 +122,17 @@ export default function CameraScreen() {
 
       if (!result.canceled && result.assets) {
         setIsProcessing(true);
-        
+
+        // Process all selected images
         for (const asset of result.assets) {
           await processImage(asset.uri);
         }
-        
+
         Alert.alert(
-          'Success', 
-          `Added ${result.assets.length} photo${result.assets.length > 1 ? 's' : ''} to your gallery`
+          'Success',
+          `Added ${result.assets.length} photo${
+            result.assets.length > 1 ? 's' : ''
+          } to your gallery`
         );
       }
     } catch (error) {
@@ -123,54 +150,74 @@ export default function CameraScreen() {
         style={styles.camera}
         facing={facing}
         flash={flashMode}
-      >
-        {/* Header */}
-        <SafeAreaView style={styles.header}>
-          <TouchableOpacity 
-            style={styles.headerButton}
-            onPress={() => router.back()}
-          >
-            <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
-          </TouchableOpacity>
-          
-          <View style={styles.headerCenter}>
-            {isProcessing && (
-              <View style={styles.processingBadge}>
-                <Text style={styles.processingText}>Processing...</Text>
-              </View>
-            )}
-          </View>
+      />
 
-          <TouchableOpacity style={styles.headerButton} onPress={toggleFlash}>
+      {/* Top Controls */}
+      <SafeAreaView style={styles.topControls}>
+        <Animated.View
+          entering={SlideInLeft.delay(100)}
+          style={styles.topControlsContainer}
+        >
+          <TouchableOpacity style={styles.controlButton} onPress={toggleFlash}>
             {flashMode === 'off' ? (
               <FlashOff size={24} color="#FFFFFF" strokeWidth={2} />
             ) : (
-              <Flash size={24} color="#FFD700" strokeWidth={2} />
+              <Flash size={24} color="#FFBB33" strokeWidth={2} />
             )}
           </TouchableOpacity>
-        </SafeAreaView>
 
-        {/* Bottom Controls */}
-        <View style={styles.bottomControls}>
-          <TouchableOpacity style={styles.galleryButton} onPress={pickImage}>
-            <ImageIcon size={28} color="#FFFFFF" strokeWidth={2} />
-          </TouchableOpacity>
+          <View style={styles.processingIndicator}>
+            {isProcessing && (
+              <Animated.View
+                entering={FadeInDown}
+                style={styles.processingBadge}
+              >
+                <Text style={styles.processingText}>Processing with AI...</Text>
+              </Animated.View>
+            )}
+          </View>
+        </Animated.View>
+      </SafeAreaView>
 
-          <TouchableOpacity
-            style={[styles.captureButton, isProcessing && styles.captureButtonDisabled]}
-            onPress={takePicture}
-            disabled={isProcessing}
-          >
-            <View style={styles.captureButtonInner}>
-              <Camera size={32} color="#212121" strokeWidth={2} />
-            </View>
-          </TouchableOpacity>
+      {/* Bottom Controls */}
+      <Animated.View
+        entering={FadeInUp.delay(200)}
+        style={styles.bottomControls}
+      >
+        <TouchableOpacity style={styles.galleryButton} onPress={pickImage}>
+          <Image size={28} color="#FFFFFF" strokeWidth={2} />
+        </TouchableOpacity>
 
-          <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing}>
-            <RotateCcw size={28} color="#FFFFFF" strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
-      </CameraView>
+        <TouchableOpacity
+          style={[
+            styles.captureButton,
+            isProcessing && styles.captureButtonDisabled,
+          ]}
+          onPress={takePicture}
+          disabled={isProcessing}
+        >
+          <View style={styles.captureButtonInner}>
+            {isProcessing ? (
+              <View style={styles.processingDot} />
+            ) : (
+              <Camera size={32} color="#000000" strokeWidth={2} />
+            )}
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.flipButton}
+          onPress={toggleCameraFacing}
+        >
+          <RotateCcw size={28} color="#FFFFFF" strokeWidth={2} />
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* Camera Guides */}
+      <View style={styles.cameraGuides}>
+        <View style={styles.guideLine} />
+        <View style={[styles.guideLine, styles.guideLineHorizontal]} />
+      </View>
     </View>
   );
 }
@@ -188,7 +235,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    backgroundColor: '#FAFAFA',
   },
   permissionContent: {
     alignItems: 'center',
@@ -196,8 +242,8 @@ const styles = StyleSheet.create({
   },
   permissionTitle: {
     fontSize: 24,
-    fontFamily: 'Roboto-Bold',
-    color: '#212121',
+    fontFamily: 'SpaceGrotesk-Bold',
+    color: '#FFFFFF',
     marginTop: 24,
     marginBottom: 12,
     textAlign: 'center',
@@ -205,16 +251,16 @@ const styles = StyleSheet.create({
   permissionDescription: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#757575',
+    color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 32,
   },
   permissionButton: {
-    backgroundColor: '#1976D2',
+    backgroundColor: '#3B82F6',
     paddingHorizontal: 24,
     paddingVertical: 16,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   permissionButtonText: {
     fontSize: 16,
@@ -224,34 +270,38 @@ const styles = StyleSheet.create({
   permissionText: {
     fontSize: 18,
     fontFamily: 'Inter-Regular',
-    color: '#212121',
+    color: '#FFFFFF',
   },
-  header: {
+  topControls: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
+    zIndex: 1,
+  },
+  topControlsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 16,
-    zIndex: 1,
   },
-  headerButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 8,
+  controlButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 12,
     padding: 12,
+    backdropFilter: 'blur(10px)',
   },
-  headerCenter: {
+  processingIndicator: {
     flex: 1,
     alignItems: 'center',
   },
   processingBadge: {
-    backgroundColor: 'rgba(25, 118, 210, 0.9)',
+    backgroundColor: 'rgba(59, 130, 246, 0.9)',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    backdropFilter: 'blur(10px)',
   },
   processingText: {
     fontSize: 14,
@@ -267,12 +317,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 32,
-    paddingBottom: 50,
+    paddingBottom: 120,
   },
   galleryButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 16,
     padding: 16,
+    backdropFilter: 'blur(10px)',
   },
   captureButton: {
     width: 80,
@@ -295,9 +346,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  processingDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#3B82F6',
+  },
   flipButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 16,
     padding: 16,
+    backdropFilter: 'blur(10px)',
+  },
+  cameraGuides: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    pointerEvents: 'none',
+  },
+  guideLine: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    width: 1,
+    height: '66%',
+  },
+  guideLineHorizontal: {
+    width: '66%',
+    height: 1,
   },
 });

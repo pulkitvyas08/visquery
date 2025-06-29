@@ -2,7 +2,6 @@ import React from 'react';
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
@@ -11,22 +10,27 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MoveVertical as MoreVertical, Share } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  MoveVertical as MoreVertical,
+  Share,
+} from 'lucide-react-native';
 import { useImageGallery } from '@/hooks/useImageGallery';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
 const GRID_PADDING = 20;
 const GRID_GAP = 8;
 const GRID_COLS = 3;
-const IMAGE_SIZE = (width - GRID_PADDING * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS;
+const IMAGE_SIZE =
+  (width - GRID_PADDING * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS;
 
 export default function AlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { albums, images } = useImageGallery();
-  
-  const album = albums.find(a => a.id === id);
-  const albumImages = images.filter(img => img.albumId === id);
+
+  const album = albums.find((a) => a.id === id);
+  const albumImages = images.filter((img) => img.albumId === id);
 
   if (!album) {
     return (
@@ -38,23 +42,52 @@ export default function AlbumScreen() {
     );
   }
 
-  const handleImagePress = (image: any) => {
-    router.push(`/image-viewer/${image.id}`);
+  const handleImagePress = (image: any, index: number) => {
+    router.push({
+      pathname: '/image-viewer/[id]',
+      params: {
+        id: image.id,
+        imageIndex: index.toString(),
+        imageIds: JSON.stringify(albumImages.map((img) => img.id)),
+      },
+    });
   };
 
-  const renderGridItem = ({ item, index }: { item: any; index: number }) => (
-    <Animated.View
-      entering={FadeInDown.delay(index * 50)}
-      style={styles.gridItem}
-    >
-      <TouchableOpacity 
-        style={styles.imageContainer}
-        onPress={() => handleImagePress(item)}
-      >
-        <Image source={{ uri: item.uri }} style={styles.gridImage} />
-      </TouchableOpacity>
-    </Animated.View>
-  );
+  const renderGridImages = () => {
+    const rows = [];
+    for (let i = 0; i < albumImages.length; i += GRID_COLS) {
+      const rowImages = albumImages.slice(i, i + GRID_COLS);
+      rows.push(
+        <View key={i} style={styles.gridRow}>
+          {rowImages.map((item, index) => (
+            <Animated.View
+              key={item.id}
+              entering={FadeInUp.delay((i + index) * 50)}
+              style={styles.gridItem}
+            >
+              <TouchableOpacity
+                style={styles.imageContainer}
+                onPress={() => handleImagePress(item, i + index)}
+              >
+                <Image source={{ uri: item.uri }} style={styles.gridImage} />
+              </TouchableOpacity>
+            </Animated.View>
+          ))}
+          {/* Fill empty spaces in the last row */}
+          {rowImages.length < GRID_COLS &&
+            Array.from({ length: GRID_COLS - rowImages.length }).map(
+              (_, emptyIndex) => (
+                <View
+                  key={`empty-${i}-${emptyIndex}`}
+                  style={styles.gridItem}
+                />
+              )
+            )}
+        </View>
+      );
+    }
+    return rows;
+  };
 
   return (
     <View style={styles.container}>
@@ -62,7 +95,7 @@ export default function AlbumScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.backButton}
               onPress={() => router.back()}
             >
@@ -85,37 +118,28 @@ export default function AlbumScreen() {
           </View>
         </View>
 
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Album Cover */}
           {album.coverImage && (
             <View style={styles.coverSection}>
-              <Image source={{ uri: album.coverImage }} style={styles.coverImage} />
+              <Image
+                source={{ uri: album.coverImage }}
+                style={styles.coverImage}
+              />
               <View style={styles.coverOverlay}>
                 <Text style={styles.coverTitle}>{album.title}</Text>
-                <Text style={styles.coverSubtitle}>{albumImages.length} photos</Text>
+                <Text style={styles.coverSubtitle}>
+                  {albumImages.length} photos
+                </Text>
               </View>
             </View>
           )}
 
           {/* Images Grid */}
-          <View style={styles.gridContainer}>
-            <View style={styles.gridWrapper}>
-              {albumImages.map((item, index) => (
-                <Animated.View
-                  key={item.id}
-                  entering={FadeInDown.delay(index * 50)}
-                  style={styles.gridItem}
-                >
-                  <TouchableOpacity 
-                    style={styles.imageContainer}
-                    onPress={() => handleImagePress(item)}
-                  >
-                    <Image source={{ uri: item.uri }} style={styles.gridImage} />
-                  </TouchableOpacity>
-                </Animated.View>
-              ))}
-            </View>
-          </View>
+          <View style={styles.gridContainer}>{renderGridImages()}</View>
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -199,25 +223,25 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   gridContainer: {
-    flex: 1,
     padding: GRID_PADDING,
   },
-  gridWrapper: {
+  gridRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    marginBottom: GRID_GAP,
   },
   gridItem: {
     width: IMAGE_SIZE,
-    marginBottom: GRID_GAP,
   },
   imageContainer: {
+    width: IMAGE_SIZE,
+    height: IMAGE_SIZE,
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#F5F5F5',
   },
   gridImage: {
-    width: IMAGE_SIZE,
-    height: IMAGE_SIZE,
+    width: '100%',
+    height: '100%',
   },
 });
